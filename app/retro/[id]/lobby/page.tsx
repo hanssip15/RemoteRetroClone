@@ -1,17 +1,19 @@
 "use client"
-
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { JoinNameModal } from "@/components/join-name-modal"
 import { ShareLinkModal } from "@/components/share-link-modal"
-import { ArrowLeft, Users, Clock, Share2, Play, RefreshCw, Crown } from "lucide-react"
+import { TransferFacilitatorModal } from "@/components/transfer-facilitator-modal"
+import { ArrowLeft, Users, Clock, Share2, Play, RefreshCw, Crown, UserCheck } from "lucide-react"
 import Link from "next/link"
+import { useSession } from "next-auth/react"
+import { UserProfile } from "@/components/user-profile"
+import { useToast } from "@/hooks/use-toast"
 
 interface Retro {
-  id: number
+  id: string
   title: string
   description: string
   status: string
@@ -21,28 +23,34 @@ interface Retro {
 }
 
 interface Participant {
-  id: number
+  id: string
   name: string
-  role: string
+  role: boolean
   joined_at: string
+  user_id?: string
 }
 
 export default function RetroLobbyPage() {
   const params = useParams()
   const router = useRouter()
   const retroId = params.id as string
+  const { toast } = useToast()
 
   const [retro, setRetro] = useState<Retro | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [userName, setUserName] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<boolean | null>(null)
+  const [userName, setUserName] = useState<string | undefined>(undefined)
   const [showJoinModal, setShowJoinModal] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showStartConfirm, setShowStartConfirm] = useState(false)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [selectedParticipantForTransfer, setSelectedParticipantForTransfer] = useState<Participant | null>(null)
   const [isJoining, setIsJoining] = useState(false)
   const [joinError, setJoinError] = useState<string | null>(null)
+
+  const { data: session, status } = useSession()
 
   useEffect(() => {
     if (retroId === "new") {
@@ -50,8 +58,8 @@ export default function RetroLobbyPage() {
       return
     }
 
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       setError("Invalid retro ID")
       setLoading(false)
       return
@@ -62,14 +70,16 @@ export default function RetroLobbyPage() {
     const storedUserRole = localStorage.getItem(`retro_${retroId}_role`)
 
     if (storedUserName && storedUserRole) {
-      setUserName(storedUserName)
-      setUserRole(storedUserRole)
+      setUserName(storedUserName ?? undefined)
+      setUserRole(storedUserRole === "true")
     } else {
-      setShowJoinModal(true)
+      // Auto-join user immediately when they access the lobby
+      handleAutoJoin()
     }
 
     fetchLobbyData()
-  }, [retroId, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retroId, router, session, status])
 
   const fetchLobbyData = async () => {
     try {
@@ -96,6 +106,66 @@ export default function RetroLobbyPage() {
     }
   }
 
+  const handleAutoJoin = async () => {
+    setIsJoining(true)
+    setJoinError(null)
+
+    try {
+      const response = await fetch(`/api/retros/${retroId}/auto-join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          name: session?.user?.name || null,
+          autoJoin: true 
+        }),
+      })
+
+      if (response.ok) {
+        const participant = await response.json()
+
+        // Store user info in localStorage
+        localStorage.setItem(`retro_${retroId}_user`, participant.name)
+        localStorage.setItem(`retro_${retroId}_role`, participant.role)
+
+        setUserName(participant.name ?? undefined)
+        setUserRole(participant.role)
+        setShowJoinModal(false)
+
+        toast({
+          title: "Joined Successfully!",
+          description: `You're now participating as ${participant.name}`,
+          duration: 3000,
+        })
+
+        // Refresh lobby data
+        fetchLobbyData()
+      } else {
+        const errorData = await response.json()
+        console.error("Auto-join failed:", errorData.error)
+        console.error("Error details:", errorData.details)
+        
+        // Show error toast but don't show manual join modal
+        // since participant might have actually joined successfully
+        toast({
+          title: "Auto-join warning",
+          description: `Auto-join returned error but participant may have joined. Error: ${errorData.error}`,
+          variant: "destructive",
+        })
+        
+        // Refresh participants list to check if join actually worked
+        // The participants will be refreshed on the next useEffect cycle
+      }
+    } catch (error) {
+      console.error("Error auto-joining retro:", error)
+      // If auto-join fails, show manual join modal
+      setShowJoinModal(true)
+    } finally {
+      setIsJoining(false)
+    }
+  }
+
   const handleJoin = async (name: string) => {
     setIsJoining(true)
     setJoinError(null)
@@ -116,7 +186,7 @@ export default function RetroLobbyPage() {
         localStorage.setItem(`retro_${retroId}_user`, name)
         localStorage.setItem(`retro_${retroId}_role`, participant.role)
 
-        setUserName(name)
+        setUserName(name ?? undefined)
         setUserRole(participant.role)
         setShowJoinModal(false)
 
@@ -153,8 +223,8 @@ export default function RetroLobbyPage() {
   }
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : ""
-  const facilitator = participants.find((p) => p.role === "facilitator")
-  const isFacilitator = userRole === "facilitator"
+  const facilitator = participants.find((p) => p.role === true)
+  const isFacilitator = userRole === false
 
   if (loading) {
     return (
@@ -219,6 +289,7 @@ export default function RetroLobbyPage() {
                   Share Link
                 </Button>
               )}
+              <UserProfile />
             </div>
           </div>
         </div>
@@ -271,7 +342,21 @@ export default function RetroLobbyPage() {
             <CardContent>
               <div className="space-y-3">
                 {participants.map((participant) => (
-                  <div key={participant.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div 
+                    key={participant.id} 
+                    className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                      isFacilitator && participant.role !== true 
+                        ? "bg-gray-50 hover:bg-gray-100 cursor-pointer" 
+                        : "bg-gray-50"
+                    }`}
+                    onClick={() => {
+                      if (isFacilitator && participant.role !== true) {
+                        setShowTransferModal(true)
+                        // Set selected participant for transfer
+                        setSelectedParticipantForTransfer(participant)
+                      }
+                    }}
+                  >
                     <div className="flex items-center space-x-2">
                       <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
                         <span className="text-sm font-semibold text-indigo-600">
@@ -279,8 +364,19 @@ export default function RetroLobbyPage() {
                         </span>
                       </div>
                       <span className="font-medium">{participant.name}</span>
+                      {participant.name.startsWith('Participant') && (
+                        <Badge variant="outline" className="text-xs">Auto-joined</Badge>
+                      )}
+                      {isFacilitator && participant.role !== true && (
+                        <Badge variant="secondary" className="text-xs">Click to transfer role</Badge>
+                      )}
                     </div>
-                    {participant.role === "facilitator" && <Crown className="h-4 w-4 text-yellow-500" />}
+                    <div className="flex items-center space-x-2">
+                      {participant.role === true && <Crown className="h-4 w-4 text-yellow-500" />}
+                      {isFacilitator && participant.role !== true && (
+                        <UserCheck className="h-4 w-4 text-gray-400" />
+                      )}
+                    </div>
                   </div>
                 ))}
                 {participants.length === 0 && <p className="text-gray-500 text-center py-4">No participants yet</p>}
@@ -317,6 +413,11 @@ export default function RetroLobbyPage() {
                   {participants.length === 0 && (
                     <p className="text-sm text-amber-600">Share the link to get participants to join first.</p>
                   )}
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Instant Join:</strong> When team members click the shared link, they'll automatically become participants.
+                    </p>
+                  </div>
                 </>
               ) : (
                 <>
@@ -330,6 +431,13 @@ export default function RetroLobbyPage() {
                       <div className="w-2 h-2 bg-indigo-600 rounded-full"></div>
                     </div>
                   </div>
+                  {userName && (
+                    <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                      <p className="text-sm text-green-800">
+                        <strong>Participating as:</strong> {userName}
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
@@ -337,10 +445,34 @@ export default function RetroLobbyPage() {
         </div>
       </div>
 
-      {/* Modals */}
-      {showJoinModal && <JoinNameModal onJoin={handleJoin} isJoining={isJoining} error={joinError} />}
+      {/* Modals - Only show if auto-join failed */}
+     
 
       <ShareLinkModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} shareUrl={shareUrl} />
+      
+      <TransferFacilitatorModal
+  isOpen={showTransferModal}
+  onClose={() => {
+    setShowTransferModal(false)
+    setSelectedParticipantForTransfer(null)
+  }}
+  participants={participants}
+  currentFacilitator={facilitator || null}
+  selectedParticipant={selectedParticipantForTransfer}
+  retroId={retroId}
+  onTransferSuccess={() => {
+    fetchLobbyData()
+    setSelectedParticipantForTransfer(null)
+
+    // Update localStorage if current user is the new facilitator
+    const newFacilitator = participants.find(p => p.role === true)
+    if (newFacilitator && newFacilitator.name === userName) {
+      localStorage.setItem(`retro_${retroId}_role`, true)
+      setUserRole(true)
+    }
+  }}
+/>
+
 
       {/* Start Confirmation Modal */}
       {showStartConfirm && (

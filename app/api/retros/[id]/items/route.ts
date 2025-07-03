@@ -1,26 +1,26 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { getSession } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
+    const { id: retroId } = await params
 
     // Handle the case where id is "new"
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    // Validate that retroId is a number
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
     const items = await sql`
       SELECT * FROM retro_items 
-      WHERE retro_id = ${numericRetroId}
+      WHERE retro_id = ${retroId}
       ORDER BY created_at ASC
     `
 
@@ -31,18 +31,23 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
+    const session = await getSession()
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id: retroId } = await params
 
     // Handle the case where id is "new"
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    // Validate that retroId is a number
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
@@ -50,8 +55,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { type, content, author } = body
 
     const [item] = await sql`
-      INSERT INTO retro_items (retro_id, type, content, author, votes, created_at)
-      VALUES (${numericRetroId}, ${type}, ${content}, ${author}, 0, NOW())
+      INSERT INTO retro_items (retro_id, type, content, author, user_id, votes, created_at)
+      VALUES (${retroId}, ${type}, ${content}, ${author}, ${session.user.id}, 0, NOW())
       RETURNING *
     `
 

@@ -42,7 +42,20 @@ cd remote-retro
 npm install
 \`\`\`
 
-### 3. Setup Database
+### 3. Setup Google OAuth
+
+#### Create Google OAuth Credentials:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable Google+ API
+4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"
+5. Set Application Type to "Web application"
+6. Add authorized redirect URIs:
+   - `http://localhost:3000/api/auth/callback/google` (for development)
+   - `https://your-domain.com/api/auth/callback/google` (for production)
+7. Copy Client ID and Client Secret
+
+### 4. Setup Database
 
 #### Buat Database di Neon:
 1. Kunjungi [Neon Console](https://console.neon.tech)
@@ -53,15 +66,34 @@ npm install
 Buat file \`.env.local\` di root project:
 
 \`\`\`env
+# Database
 DATABASE_URL="postgresql://username:password@host/database?sslmode=require"
+
+# NextAuth
+VITE_BACKEND_URL="http://localhost:3000"
+JWT_SECRET="your-jwt-secret-key-here"
+
+# Google OAuth
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+\`\`\`
+
+#### Generate JWT Secret:
+\`\`\`bash
+# Using Node.js (Windows/Linux/Mac)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
+# Using OpenSSL (Linux/Mac)
+openssl rand -base64 32
 \`\`\`
 
 #### Inisialisasi Database:
 Jalankan script SQL untuk membuat tabel:
 
 \`\`\`bash
-# Script akan dijalankan otomatis saat pertama kali mengakses API
-# Atau Anda bisa menjalankan script SQL secara manual di Neon Console
+# Run the database initialization script
+# This will create the users table and update existing tables
+psql $DATABASE_URL -f scripts/update-users-table.sql
 \`\`\`
 
 ### 4. Jalankan Development Server
@@ -99,6 +131,13 @@ remote-retro/
 
 ## 🗄️ Database Schema
 
+### Tabel \`users\`
+- \`id\`: Primary key (Google OAuth ID)
+- \`email\`: Email user (unique)
+- \`name\`: Nama lengkap user
+- \`image_url\`: URL foto profil Google
+- \`created_at\`, \`updated_at\`: Timestamps
+
 ### Tabel \`retros\`
 - \`id\`: Primary key
 - \`title\`: Judul retrospektif
@@ -106,6 +145,7 @@ remote-retro/
 - \`team_size\`: Jumlah anggota tim
 - \`duration\`: Durasi dalam menit
 - \`status\`: Status (draft, active, completed)
+- \`created_by\`: Foreign key ke users (creator)
 - \`created_at\`, \`updated_at\`: Timestamps
 
 ### Tabel \`retro_items\`
@@ -114,6 +154,7 @@ remote-retro/
 - \`type\`: Tipe item (went_well, improve, action_item)
 - \`content\`: Konten feedback
 - \`author\`: Nama author
+- \`user_id\`: Foreign key ke users (author)
 - \`votes\`: Jumlah votes
 - \`created_at\`: Timestamp
 
@@ -121,6 +162,8 @@ remote-retro/
 - \`id\`: Primary key
 - \`retro_id\`: Foreign key ke retros
 - \`name\`: Nama participant
+- \`user_id\`: Foreign key ke users
+- \`role\`: Role dalam retro (facilitator, participant)
 - \`joined_at\`: Timestamp bergabung
 
 ## 🚀 Deployment ke Vercel
@@ -149,14 +192,15 @@ Setelah deployment berhasil, Anda bisa menambahkan custom domain di Vercel dashb
 
 ### Untuk User Awam:
 
-1. **Akses Aplikasi**: Buka URL aplikasi di browser
+1. **Sign In**: Klik "Sign In" dan login dengan Google
 2. **Buat Retrospektif Baru**:
-   - Klik "Start Retro" di homepage
+   - Klik "Start Retro" di homepage atau "New Retro" di dashboard
    - Isi form dengan judul dan detail retrospektif
    - Klik "Create Retrospective"
 3. **Bagikan Link**: Share link retrospektif ke anggota tim
-4. **Mulai Sesi**: Tim bisa mulai menambahkan feedback
-5. **Review Results**: Lihat hasil di dashboard
+4. **Join Session**: Tim members sign in dan join retro session
+5. **Mulai Sesi**: Tim bisa mulai menambahkan feedback
+6. **Review Results**: Lihat hasil di dashboard
 
 ### Untuk Developer:
 

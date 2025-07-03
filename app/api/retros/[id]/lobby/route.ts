@@ -3,22 +3,22 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
+    const { id: retroId } = await params
 
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
     // Get retro details
     const [retro] = await sql`
-      SELECT * FROM retros WHERE id = ${numericRetroId}
+      SELECT * FROM retros WHERE id = ${retroId}
     `
 
     if (!retro) {
@@ -26,37 +26,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Check if role column exists
-    const roleColumnExists = await sql`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'participants' AND column_name = 'role'
-      ) as has_role_column
-    `
-
-    let participants
-
-    if (roleColumnExists[0]?.has_role_column) {
+   
       // Role column exists, select it
-      participants = await sql`
-        SELECT id, name, role, joined_at 
-        FROM participants 
-        WHERE retro_id = ${numericRetroId}
-        ORDER BY joined_at ASC
+      let participants = await sql`
+        SELECT
+        participants.id AS id,
+        participants.role as role,
+        users.name AS name
+      FROM participants
+      JOIN users
+        ON participants.user_id = users.id
+      WHERE participants.retro_id = ${retroId}
       `
-    } else {
-      // Role column doesn't exist, select without it and add default
-      participants = await sql`
-        SELECT id, name, joined_at 
-        FROM participants 
-        WHERE retro_id = ${numericRetroId}
-        ORDER BY joined_at ASC
-      `
-      // Add role property manually (first participant is facilitator)
-      participants = participants.map((p, index) => ({
-        ...p,
-        role: index === 0 ? "facilitator" : "participant",
-      }))
-    }
 
     return NextResponse.json({
       retro,

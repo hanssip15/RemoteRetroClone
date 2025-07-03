@@ -1,20 +1,28 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { getSession } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
+    console.log("=== POST /api/retros/[id]/join STARTED ===")
+    const session = await getSession()
+    // console.log("Session data:", session)
+    
+    const userId = session?.user?.id || null
+
+    const { id: retroId } = await params
     const body = await request.json()
     const { name } = body
 
+    console.log("Retro :", retroId)
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
@@ -26,7 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // Check if retro exists
     const [retro] = await sql`
-      SELECT * FROM retros WHERE id = ${numericRetroId}
+      SELECT * FROM retros WHERE id = ${retroId}
     `
 
     if (!retro) {
@@ -38,48 +46,42 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Retro is not available for joining" }, { status: 400 })
     }
 
-    try {
-      // Check if role column exists
-      const roleColumnExists = await sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'participants' AND column_name = 'role'
-        ) as has_role_column
+    // --- Idempotent join logic ---
+    if (userId) {
+      // Cek apakah user_id sudah join
+      const [existing] = await sql`
+        SELECT * FROM participants WHERE retro_id = ${retroId} AND user_id = ${userId}
       `
-
-      let participant
-
-      if (roleColumnExists[0]?.has_role_column) {
-        // Role column exists, use it
-        console.log("Role column exists, inserting with role")
-        const [participantResult] = await sql`
-          INSERT INTO participants (retro_id, name, role, joined_at)
-          VALUES (${numericRetroId}, ${cleanName}, 'participant', NOW())
-          RETURNING *
-        `
-        participant = participantResult
-      } else {
-        // Role column doesn't exist, insert without it
-        console.log("Role column doesn't exist, inserting without role")
-        const [participantResult] = await sql`
-          INSERT INTO participants (retro_id, name, joined_at)
-          VALUES (${numericRetroId}, ${cleanName}, NOW())
-          RETURNING *
-        `
-        participant = participantResult
-        // Add role property manually for response
-        participant.role = "participant"
+      if (existing) {
+        return NextResponse.json(existing, { status: 200 })
       }
-
-      return NextResponse.json(participant, { status: 201 })
-    } catch (error) {
-      // Handle duplicate name error
-      if (error.message.includes("unique") || error.message.includes("duplicate")) {
+    } else {
+      const [existingName] = await sql`
+        SELECT * FROM participants WHERE retro_id = ${retroId} AND name = ${cleanName}
+      `
+      if (existingName) {
         return NextResponse.json({ error: "Name already taken in this retro" }, { status: 409 })
       }
-      throw error
     }
-  } catch (error) {
+
+  
+
+    let participant
+    
+
+      console.log("User ID:", userId)
+      console.log("Retro ID:", retroId)
+      const [participantResult] = await sql`
+        INSERT INTO participants (retro_id, user_id, role)
+        VALUES (${retroId}, ${userId}, true)
+        RETURNING *
+      `
+      participant = participantResult
+      // Add role property manually for response
+      participant.role = "participant"
+
+    return NextResponse.json(participant, { status: 201 })
+  } catch (error: any) {
     console.error("Database error:", error)
     return NextResponse.json({ error: "Failed to join retro" }, { status: 500 })
   }

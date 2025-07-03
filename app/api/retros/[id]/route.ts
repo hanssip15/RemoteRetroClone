@@ -3,24 +3,23 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
-
+    const { id: retroId } = await params
+    console.log("=== GET /api/retros/[id] STARTED ===", retroId)
     // Handle the case where id is "new" - this should not be processed here
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    // Validate that retroId is a number
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
-    // Get retro details
+    // Get retro details using string ID
     const [retro] = await sql`
-      SELECT * FROM retros WHERE id = ${numericRetroId}
+      SELECT * FROM retros WHERE id = ${retroId}
     `
 
     if (!retro) {
@@ -30,14 +29,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // Get retro items
     const items = await sql`
       SELECT * FROM retro_items 
-      WHERE retro_id = ${numericRetroId}
+      WHERE retro_id = ${retroId}
       ORDER BY created_at ASC
     `
 
     // Get participants
     const participants = await sql`
       SELECT * FROM participants 
-      WHERE retro_id = ${numericRetroId}
+      WHERE retro_id = ${retroId}
       ORDER BY joined_at ASC
     `
 
@@ -52,18 +51,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
+    const { id: retroId } = await params
 
     // Handle the case where id is "new"
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    // Validate that retroId is a number
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
@@ -73,7 +71,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const [retro] = await sql`
       UPDATE retros 
       SET title = ${title}, description = ${description}, status = ${status}, updated_at = NOW()
-      WHERE id = ${numericRetroId}
+      WHERE id = ${retroId}
       RETURNING *
     `
 

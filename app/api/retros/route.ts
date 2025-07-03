@@ -1,8 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
+import { getSession } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
-
+function generateId(length = 10) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
 export async function GET() {
   try {
     console.log("=== GET /api/retros ===")
@@ -24,6 +28,12 @@ export async function POST(request: NextRequest) {
   console.log("=== POST /api/retros STARTED ===")
 
   try {
+    const session = await getSession()
+    
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     console.log("Request body:", body)
 
@@ -41,22 +51,25 @@ export async function POST(request: NextRequest) {
       teamSize: teamSize || null,
       duration: duration || 60,
     }
-
     console.log("Clean data for insert:", cleanData)
-
     // Test database connection first
     console.log("Testing database connection...")
     const testQuery = await sql`SELECT 1 as test`
     console.log("Database connection test:", testQuery)
-
     console.log("Inserting retro into database...")
-    const result = await sql`
-      INSERT INTO retros (title, description, team_size, duration, status, created_at, updated_at)
-      VALUES (${cleanData.title}, ${cleanData.description}, ${cleanData.teamSize}, ${cleanData.duration}, 'active', NOW(), NOW())
-      RETURNING *
-    `
+      let result: any
+    
+    // Generate a unique ID for the retro    
+    const id = generateId(12) // Shorter, more manageable ID
 
-    console.log("Database insert result:", result)
+
+      result = await sql`
+        INSERT INTO retros (id, title, status, created_by, created_at, updated_at)
+        VALUES (${id}, ${cleanData.title}, 'active', ${session.user.id}, NOW(), NOW())
+        RETURNING *
+      `
+      console.log("Database insert result:", result)
+
 
     if (!result || result.length === 0) {
       throw new Error("No data returned from insert")
@@ -73,7 +86,7 @@ export async function POST(request: NextRequest) {
     console.log("Returning retro with ID:", retro.id)
 
     return NextResponse.json(retro, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
     console.error("=== POST /api/retros ERROR ===")
     console.error("Error details:", error)
     console.error("Error message:", error.message)

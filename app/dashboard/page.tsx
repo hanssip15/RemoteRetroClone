@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Calendar, Users, TrendingUp, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { UserProfile } from "@/components/user-profile"
+import { useUser } from "@/hooks/use-user"
 
 interface DashboardStats {
   totalRetros: number
@@ -38,6 +41,8 @@ interface PaginationInfo {
 }
 
 export default function DashboardPage() {
+  const { session, status } = useUser()
+  const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [retros, setRetros] = useState<Retro[]>([])
   const [pagination, setPagination] = useState<PaginationInfo | null>(null)
@@ -45,16 +50,25 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Auto-refresh every 15 seconds
+  // Redirect to sign in if not authenticated
   useEffect(() => {
-    fetchDashboardData()
+    if (status === "unauthenticated") {
+      router.push("/auth/signin")
+    }
+  }, [status, router])
 
-    const interval = setInterval(() => {
-      fetchDashboardData(true) // Silent refresh
-    }, 15000)
+  // Auto-refresh every 15 seconds - only run when authenticated
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetchDashboardData()
 
-    return () => clearInterval(interval)
-  }, [currentPage])
+      const interval = setInterval(() => {
+        fetchDashboardData(true) // Silent refresh
+      }, 15000)
+
+      return () => clearInterval(interval)
+    }
+  }, [currentPage, status])
 
   const fetchDashboardData = async (silent = false) => {
     if (!silent) {
@@ -129,6 +143,22 @@ export default function DashboardPage() {
     }
   }
 
+  // Early returns after all hooks
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === "unauthenticated") {
+    return null
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -195,6 +225,7 @@ export default function DashboardPage() {
                 <span>New Retro</span>
               </Button>
             </Link>
+            <UserProfile />
           </div>
         </div>
 

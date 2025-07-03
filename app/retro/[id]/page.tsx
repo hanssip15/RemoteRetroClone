@@ -20,7 +20,7 @@ interface RetroItem {
 }
 
 interface Retro {
-  id: number
+  id: string
   title: string
   description: string
   status: string
@@ -53,9 +53,8 @@ export default function RetroPage() {
       return
     }
 
-    // Validate that retroId is a number
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       setError("Invalid retro ID")
       setLoading(false)
       return
@@ -87,9 +86,9 @@ export default function RetroPage() {
         console.error("API error response:", errorData)
         setError(errorData.error || "Failed to fetch retro data")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching retro data:", error)
-      setError(`Failed to fetch retro data: ${error.message}`)
+      setError(`Failed to fetch retro data: ${error.message || 'Unknown error'}`)
     } finally {
       setLoading(false)
     }

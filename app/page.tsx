@@ -1,9 +1,15 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, MessageSquare, BarChart3, Zap } from "lucide-react"
+import { UserProfile } from "@/components/user-profile"
+import { useUser } from "@/hooks/use-user"
 
 export default function HomePage() {
+  const { session, status } = useUser()
+  console.log("User session:", session)
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
@@ -14,12 +20,21 @@ export default function HomePage() {
             <h1 className="text-2xl font-bold text-gray-900">RemoteRetro</h1>
           </div>
           <nav className="flex items-center space-x-4">
-            <Link href="/dashboard">
-              <Button variant="ghost">Dashboard</Button>
-            </Link>
-            <Link href="/retro/new">
-              <Button>Start Retro</Button>
-            </Link>
+            {session ? (
+              <>
+                <Link href="/dashboard">
+                  <Button variant="ghost">Dashboard</Button>
+                </Link>
+                <Link href="/retro/new">
+                  <Button>Start Retro</Button>
+                </Link>
+                <UserProfile />
+              </>
+            ) : (
+              <Link href="/auth/signin">
+                <Button>Sign In</Button>
+              </Link>
+            )}
           </nav>
         </div>
       </header>

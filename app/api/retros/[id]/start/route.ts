@@ -3,16 +3,16 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const retroId = params.id
+    const { id: retroId } = await params
 
     if (retroId === "new") {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 })
     }
 
-    const numericRetroId = Number.parseInt(retroId, 10)
-    if (isNaN(numericRetroId)) {
+    // Validate that retroId is not empty
+    if (!retroId || retroId.trim().length === 0) {
       return NextResponse.json({ error: "Invalid retro ID" }, { status: 400 })
     }
 
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const [retro] = await sql`
       UPDATE retros 
       SET status = 'in_progress', updated_at = NOW()
-      WHERE id = ${numericRetroId}
+      WHERE id = ${retroId}
       RETURNING *
     `
 

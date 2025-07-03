@@ -3,9 +3,9 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
-export async function POST(request: NextRequest, { params }: { params: { id: string; itemId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string; itemId: string }> }) {
   try {
-    const { itemId } = params
+    const { itemId } = await params
 
     // Validate that itemId is a number
     const numericItemId = Number.parseInt(itemId, 10)

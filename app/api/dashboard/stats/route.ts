@@ -13,7 +13,9 @@ export async function GET() {
 
     // Get unique team members (participants)
     const [uniqueMembersResult] = await sql`
-      SELECT COUNT(DISTINCT name) as count FROM participants
+      SELECT COUNT(DISTINCT users.id) AS count FROM participants
+      JOIN users
+        ON participants.user_id = users.id
     `
     const uniqueMembers = Number.parseInt(uniqueMembersResult.count)
 
