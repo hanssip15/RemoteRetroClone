@@ -23,7 +23,7 @@ import { Loader2, Users } from "lucide-react"
 interface Participant {
   id: string
   name: string
-  role: string
+  role: boolean
   user_id?: string
   joined_at: string
 }

@@ -37,7 +37,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const participants = await sql`
       SELECT * FROM participants 
       WHERE retro_id = ${retroId}
-      ORDER BY joined_at ASC
     `
 
     return NextResponse.json({

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Check if current user is the facilitator
     let [currentFacilitator] = await sql`
       SELECT * FROM participants 
-      WHERE retro_id = ${retroId} AND role = 'facilitator'
+      WHERE retro_id = ${retroId} AND role = true
     `
 
     if (!currentFacilitator) {
@@ -105,14 +105,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Update current facilitator to participant
       await sql`
         UPDATE participants 
-        SET role = 'participant' 
+        SET role = false 
         WHERE id = ${currentFacilitator.id}
       `
 
       // Update new facilitator
       await sql`
         UPDATE participants 
-        SET role = 'facilitator' 
+        SET role = true 
         WHERE id = ${newFacilitator.id}
       `
 

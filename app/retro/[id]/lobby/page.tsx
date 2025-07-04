@@ -53,12 +53,8 @@ export default function RetroLobbyPage() {
   const { data: session, status } = useSession()
 
   useEffect(() => {
-    if (retroId === "new") {
-      router.push("/retro/new")
-      return
-    }
+   
 
-    // Validate that retroId is not empty
     if (!retroId || retroId.trim().length === 0) {
       setError("Invalid retro ID")
       setLoading(false)
@@ -73,7 +69,6 @@ export default function RetroLobbyPage() {
       setUserName(storedUserName ?? undefined)
       setUserRole(storedUserRole === "true")
     } else {
-      // Auto-join user immediately when they access the lobby
       handleAutoJoin()
     }
 
@@ -165,45 +160,6 @@ export default function RetroLobbyPage() {
       setIsJoining(false)
     }
   }
-
-  const handleJoin = async (name: string) => {
-    setIsJoining(true)
-    setJoinError(null)
-
-    try {
-      const response = await fetch(`/api/retros/${retroId}/join`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name }),
-      })
-
-      if (response.ok) {
-        const participant = await response.json()
-
-        // Store user info in localStorage
-        localStorage.setItem(`retro_${retroId}_user`, name)
-        localStorage.setItem(`retro_${retroId}_role`, participant.role)
-
-        setUserName(name ?? undefined)
-        setUserRole(participant.role)
-        setShowJoinModal(false)
-
-        // Refresh lobby data
-        fetchLobbyData()
-      } else {
-        const errorData = await response.json()
-        setJoinError(errorData.error || "Failed to join retro")
-      }
-    } catch (error) {
-      console.error("Error joining retro:", error)
-      setJoinError("Failed to join retro")
-    } finally {
-      setIsJoining(false)
-    }
-  }
-
   const handleStartRetro = async () => {
     try {
       const response = await fetch(`/api/retros/${retroId}/start`, {
